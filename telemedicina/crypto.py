@@ -1,4 +1,11 @@
-"""Assinatura do laudo médico: JWS ES256 com PyJWT."""
+"""Nested JWT (Sign-then-Encrypt): JWS ES256 com PyJWT e JWE ECDH-ES/P-256 + A128GCM com JWCrypto.
+
+Fluxo (Etapas 2 e 3 do roteiro):
+  1. O portal assina o laudo com a chave privada do médico  -> JWS (3 partes).
+  2. O portal cifra o JWS para o servidor com ECDH-ES       -> JWE (5 partes), cty=JWT.
+  3. O servidor decifra o JWE com sua chave privada estática -> JWS.
+  4. O servidor verifica o JWS com a chave pública do médico -> laudo autêntico.
+"""
 
 import base64
 import json
@@ -6,10 +13,12 @@ import time
 import uuid
 
 import jwt
-from jwcrypto import jwk
+from jwcrypto import jwe, jwk
 
 AUDIENCE = "prontuarios-api"
 FIELDS = ("paciente_id", "diagnostico", "prescricao")
+# Única combinação aceita no JWE; o JWCrypto rejeita qualquer outro alg/enc (ex.: "dir").
+JWE_ALGS = ["ECDH-ES", "A128GCM"]
 
 
 # public_key: Exporta apenas a parte pública de uma chave, como dicionário JWK.
@@ -58,6 +67,39 @@ def sign_report(data, key, subject):
         algorithm="ES256",
         headers={"kid": key.thumbprint()},
     )
+
+
+# encrypt_report: Etapa 2 e Etapa 3, passo 2. Cifra o JWS em um JWE compacto com ECDH-ES e A128GCM.
+def encrypt_report(signed, recipient):
+    encrypted = jwe.JWE(
+        signed.encode(),  # o JWS inteiro é o plaintext do JWE
+        protected=json.dumps(
+            {
+                "alg": "ECDH-ES",
+                "enc": "A128GCM",
+                "cty": "JWT",  # o conteúdo interno é outro JWT
+                "kid": recipient.thumbprint(),
+            }
+        ),
+        algs=JWE_ALGS,
+    )
+    # Com ECDH-ES, o JWCrypto gera um novo par efêmero (nA, PA) a cada chamada, calcula
+    # Z = nA * PB (PB = chave pública do servidor), deriva a CEK de 128 bits com a Concat KDF
+    # (RFC 7518, 4.6) e grava a chave pública efêmera PA no cabeçalho, no parâmetro "epk".
+    encrypted.add_recipient(recipient)
+    return encrypted.serialize(compact=True)
+
+
+# decrypt_report: Etapa 4. Recupera o JWS com a chave privada estática do servidor.
+def decrypt_report(token, private_key):
+    if header(token, 5).get("cty") != "JWT":
+        raise ValueError("O conteúdo do JWE deve ser um JWT (cty=JWT)")
+
+    # O JWCrypto lê o "epk" do cabeçalho e calcula Z = nB * PA e a mesma CEK do portal.
+    # A tag GCM é verificada aqui; qualquer alteração no envelope gera erro.
+    encrypted = jwe.JWE(algs=JWE_ALGS)
+    encrypted.deserialize(token, key=private_key)
+    return encrypted.payload.decode()
 
 
 # verify_report: Etapa 4. Valida a assinatura ES256 com a chave pública do médico e as claims do laudo.
