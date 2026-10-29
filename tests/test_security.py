@@ -6,6 +6,7 @@ import jwt
 import pytest
 from jwcrypto import jwk
 
+from telemedicina import server
 from telemedicina.crypto import (decrypt_report, encrypt_report, header,
                                 public_key, sign_report, verify_report)
 from telemedicina.oidc import Identity
@@ -132,6 +133,61 @@ def test_expired_report(keys):
         verify_report(signed, public_key(doctor), "d")
 
 
+# Cria uma API de teste com identidade simulada, mantendo a criptografia real.
+@pytest.fixture
+def api(keys, tmp_path, monkeypatch):
+    doctor, recipient, _ = keys
+    (tmp_path / "server-private.jwk").write_text(recipient.export_private())
+    monkeypatch.setattr(server, "RUNTIME", tmp_path)
+
+    # Simula as respostas de autenticação sem acessar o Keycloak.
+    class FakeIdentity:
+        # Aceita o token de teste e simula falhas de autenticação ou de permissão.
+        def access(self, token):
+            if token == "no-role":
+                raise PermissionError()
+            if token != "test-token":
+                raise ValueError()
+            return {"sub": "d", "doctor_jwk": public_key(doctor)}
+
+    return server.create_app({"issuer": "teste"}, FakeIdentity()).test_client()
+
+
+# Confere a confirmação do envio e que o diagnóstico não é devolvido em claro.
+def test_api_confirmation(api, keys):
+    doctor, recipient, _ = keys
+    token = encrypt_report(sign_report(report(), doctor, "d"), recipient)
+    response = api.post("/api/prontuarios", data=token, content_type="application/jose",
+                        headers={"Authorization": "Bearer test-token"})
+    assert response.status_code == 201
+    assert response.json["status"] == "confirmado"
+    assert report()["diagnostico"] not in response.get_data(as_text=True)
+
+
+# Confirma que a API publica a chave de cifragem usada pelo portal.
+def test_api_publishes_server_key(api, keys):
+    _, recipient, _ = keys
+    published = api.get("/.well-known/jwks.json").json["keys"][0]
+    assert jwk.JWK(**published).thumbprint() == recipient.thumbprint()
+    assert "d" not in published
+
+
+# Confere os códigos HTTP para token ausente, inválido ou sem o papel de médico.
+@pytest.mark.parametrize("token,status", [(None, 401), ("invalid", 401), ("no-role", 403)])
+def test_api_requires_authorization(api, token, status):
+    headers = {} if token is None else {"Authorization": "Bearer " + token}
+    assert api.post("/api/prontuarios", headers=headers).status_code == status
+
+
+# Confirma que a API rejeita envelopes adulterados e assinaturas de outra chave.
+def test_api_rejects_tampering_and_wrong_signature(api, keys):
+    doctor, recipient, wrong = keys
+    for token in [mutate(encrypt_report(sign_report(report(), doctor, "d"), recipient), 4),
+                  encrypt_report(sign_report(report(), wrong, "d"), recipient)]:
+        assert api.post("/api/prontuarios", data=token, content_type="application/jose",
+                        headers={"Authorization": "Bearer test-token"}).status_code == 400
+
+
 # Valida um JWT real e confirma a rejeição de emissor, destinatário ou expiração inválidos.
 @pytest.mark.parametrize("change", [{"iss": "other"}, {"aud": "other"}, {"exp": 1}])
 def test_oidc_validates_issuer_audience_and_expiry(keys, change):
@@ -153,4 +209,3 @@ def test_oidc_validates_issuer_audience_and_expiry(keys, change):
     assert identity.access(encode(claims))["sub"] == "d"
     with pytest.raises(jwt.InvalidTokenError):
         identity.access(encode({**claims, **change}))
-

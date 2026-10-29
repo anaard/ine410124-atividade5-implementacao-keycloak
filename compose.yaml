@@ -1,4 +1,4 @@
-# Keycloak (IdP) da atividade.
+# Serviços da atividade: Keycloak (IdP) e servidor de prontuários.
 # O serviço "bootstrap" é só uma ferramenta: gera chaves e configuração antes da subida.
 services:
   # Etapa 1: Keycloak em contêiner; o realm Telemedicina-Realm é importado de ./infra.
@@ -27,6 +27,34 @@ services:
       - ./runtime:/app/runtime
       - ./infra:/app/infra
 
+  # Servidor de Prontuários (Resource Server): POST /api/prontuarios. Só tem a chave do servidor.
+  resource-server:
+    init: true
+    image: telemedicina-app:local
+    container_name: prontuarios_api
+    command: ["python", "-m", "telemedicina.server"]
+    environment:
+      BIND_HOST: 0.0.0.0
+      KEYCLOAK_URL: http://keycloak:8080
+    ports:
+      - "127.0.0.1:5001:5001"
+    volumes:
+      - ./runtime/config.json:/app/runtime/config.json:ro
+      - ./runtime/server-private.jwk:/app/runtime/server-private.jwk:ro
+    depends_on:
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/health', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 12
 
 
 volumes:
