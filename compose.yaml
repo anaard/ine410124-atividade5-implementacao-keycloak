@@ -1,0 +1,33 @@
+# Keycloak (IdP) da atividade.
+# O serviço "bootstrap" é só uma ferramenta: gera chaves e configuração antes da subida.
+services:
+  # Etapa 1: Keycloak em contêiner; o realm Telemedicina-Realm é importado de ./infra.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    container_name: keycloak_med
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8080
+    volumes:
+      - ./infra:/opt/keycloak/data/import:ro
+      - keycloak-data:/opt/keycloak/data
+
+  bootstrap:
+    profiles: ["tools"]
+    build:
+      context: .
+      target: runtime
+    image: telemedicina-app:local
+    command: ["python", "-m", "scripts.bootstrap"]
+    volumes:
+      - ./runtime:/app/runtime
+      - ./infra:/app/infra
+
+
+
+volumes:
+  keycloak-data:

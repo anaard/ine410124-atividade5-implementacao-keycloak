@@ -1,0 +1,81 @@
+{
+  "realm": "Telemedicina-Realm",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "medico"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "portal-medico-app",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:5000/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:5000"
+      ],
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "roles"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-prontuarios",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "prontuarios-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "chave-publica-medico",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "doctor_jwk",
+            "claim.name": "doctor_jwk",
+            "jsonType.label": "JSON",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false",
+            "multivalued": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "dr.silva",
+      "firstName": "Médico",
+      "lastName": "de Teste",
+      "enabled": true,
+      "email": "dr.silva@example.invalid",
+      "emailVerified": true,
+      "realmRoles": [
+        "medico"
+      ],
+      "credentials": [],
+      "attributes": {}
+    }
+  ]
+}

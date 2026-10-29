@@ -1,0 +1,11 @@
+**
+!requirements.txt
+!telemedicina/
+!telemedicina/*.py
+!telemedicina/*.json
+!telemedicina/static/
+!telemedicina/static/*.css
+!templates/
+!templates/*.html
+!scripts/
+!scripts/*.py
