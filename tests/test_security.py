@@ -8,6 +8,7 @@ from jwcrypto import jwk
 
 from telemedicina.crypto import (decrypt_report, encrypt_report, header,
                                 public_key, sign_report, verify_report)
+from telemedicina.oidc import Identity
 
 
 # Gera chaves P-256 independentes para médico, servidor e tentativas com chave incorreta.
@@ -129,3 +130,27 @@ def test_expired_report(keys):
     signed = jwt.encode(claims, doctor.export_to_pem(private_key=True, password=None), algorithm="ES256", headers={"kid": doctor.thumbprint()})
     with pytest.raises(jwt.ExpiredSignatureError):
         verify_report(signed, public_key(doctor), "d")
+
+
+# Valida um JWT real e confirma a rejeição de emissor, destinatário ou expiração inválidos.
+@pytest.mark.parametrize("change", [{"iss": "other"}, {"aud": "other"}, {"exp": 1}])
+def test_oidc_validates_issuer_audience_and_expiry(keys, change):
+    # Sem simular verificação de assinatura: JWT realmente assinado e verificado.
+    key = jwk.JWK.generate(kty="RSA", size=2048)
+    now = int(time.time())
+    claims = {"iss": "https://idp.invalid/realm", "aud": "prontuarios-api", "sub": "d", "iat": now,
+              "exp": now + 300, "azp": "portal-medico-app", "realm_access": {"roles": ["medico"]}}
+    identity = Identity(claims["iss"])
+
+    # Substitui a consulta de rede por uma chave pública local.
+    class LocalJWKS:
+        # Retorna a chave pública usada para verificar o JWT de teste.
+        def get_signing_key_from_jwt(self, token):
+            return jwt.PyJWK(public_key(key))
+
+    identity.jwks = LocalJWKS()
+    encode = lambda c: jwt.encode(c, key.export_to_pem(private_key=True, password=None), algorithm="RS256")
+    assert identity.access(encode(claims))["sub"] == "d"
+    with pytest.raises(jwt.InvalidTokenError):
+        identity.access(encode({**claims, **change}))
+
