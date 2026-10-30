@@ -1,4 +1,4 @@
-# Serviços da atividade: Keycloak (IdP) e servidor de prontuários.
+# Três serviços da atividade: Keycloak (IdP), servidor de prontuários e portal do médico.
 # O serviço "bootstrap" é só uma ferramenta: gera chaves e configuração antes da subida.
 services:
   # Etapa 1: Keycloak em contêiner; o realm Telemedicina-Realm é importado de ./infra.
@@ -56,6 +56,35 @@ services:
       timeout: 4s
       retries: 12
 
+  # Portal do Médico (Aplicação Cliente): login OIDC e envio do Nested JWT. Só tem a chave do médico.
+  client-app:
+    init: true
+    image: telemedicina-app:local
+    container_name: portal_medico
+    command: ["python", "-m", "telemedicina.portal"]
+    environment:
+      BIND_HOST: 0.0.0.0
+      KEYCLOAK_URL: http://keycloak:8080
+      RESOURCE_SERVER_URL: http://resource-server:5001
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - ./runtime/config.json:/app/runtime/config.json:ro
+      - ./runtime/doctor-private.jwk:/app/runtime/doctor-private.jwk:ro
+    depends_on:
+      resource-server:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 12
 
 volumes:
   keycloak-data:

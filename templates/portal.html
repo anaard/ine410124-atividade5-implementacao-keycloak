@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-heading"><p class="eyebrow">Prontuários médicos</p><h1>Portal do Médico</h1>
+  <p class="intro">Preencha um laudo, assine com a chave do médico e envie ao servidor de prontuários.</p>
+</div>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if user %}
+<div class="form-layout">
+  <section aria-labelledby="novo-laudo"><h2 id="novo-laudo">Novo laudo</h2><p class="muted">Todos os campos são obrigatórios.</p>
+    <form method="post" action="/enviar">
+      <div class="field"><label for="paciente_id">Identificador do paciente</label>
+        <p class="field-help" id="paciente-help">Código que associa o laudo ao paciente. Será o campo <code>paciente_id</code> do conteúdo assinado.</p>
+        <input id="paciente_id" name="paciente_id" required maxlength="4000" aria-describedby="paciente-help" value="{{ request.form.get('paciente_id', '') }}">
+      </div>
+      <div class="field"><label for="diagnostico">Diagnóstico</label>
+        <p class="field-help" id="diagnostico-help">Descrição da avaliação clínica. Será incluída no campo <code>diagnostico</code>.</p>
+        <textarea id="diagnostico" name="diagnostico" required maxlength="4000" rows="5" aria-describedby="diagnostico-help">{{ request.form.get('diagnostico', '') }}</textarea>
+      </div>
+      <div class="field"><label for="prescricao">Prescrição</label>
+        <p class="field-help" id="prescricao-help">Conduta ou orientação do laudo. Será incluída no campo <code>prescricao</code>.</p>
+        <textarea id="prescricao" name="prescricao" required maxlength="4000" rows="5" aria-describedby="prescricao-help">{{ request.form.get('prescricao', '') }}</textarea>
+      </div>
+      <button class="button" type="submit">Assinar, cifrar e enviar</button>
+      <p class="field-help">A próxima tela apresenta a resposta do servidor e permite inspecionar os tokens deste envio.</p>
+    </form>
+  </section>
+  <aside class="form-guide" aria-labelledby="como-funciona"><h2 id="como-funciona">O que acontece no envio</h2>
+    <ol class="process-list">
+      <li><strong>Assinatura do laudo</strong><p>O portal assina os três campos com a chave privada do médico. O resultado é um JWS.</p></li>
+      <li><strong>Cifragem para o servidor</strong><p>O JWS inteiro é cifrado em um JWE usando ECDH-ES e AES-GCM.</p></li>
+      <li><strong>Conferência na API</strong><p>O servidor valida o acesso, decifra o envelope e verifica a assinatura antes de confirmar o recebimento.</p></li>
+    </ol>
+    <p class="muted">O conteúdo exibido nesta tela ainda está em claro. O corpo enviado do portal para a API será o envelope JWE.</p>
+  </aside>
+</div>
+{% else %}
+<section class="login-section" aria-labelledby="identificacao"><h2 id="identificacao">Identificação do médico</h2>
+  <p>Entre para preencher e assinar um laudo. Você será encaminhado ao Keycloak para informar usuário e senha.</p>
+  <a class="button" href="/login">Entrar com Keycloak</a>
+  <p class="muted">A chave de assinatura do médico deve corresponder à chave pública cadastrada na sua identidade.</p>
+</section>
+{% endif %}
+{% endblock %}

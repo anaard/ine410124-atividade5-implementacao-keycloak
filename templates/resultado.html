@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Prontuário confirmado{% endblock %}
+{% block content %}
+<div class="page-heading"><p class="eyebrow">Resultado do envio</p><h1>Prontuário confirmado</h1>
+  <p class="intro">A API decifrou o envelope e validou a assinatura do médico.</p>
+  <a href="/">Preencher outro laudo</a>
+</div>
+<section class="receipt" aria-labelledby="confirmacao"><h2 id="confirmacao">Resposta da API · HTTP {{ evidence.http_status }}</h2>
+  <pre id="api-response">{{ evidence.confirmacao | tojson(indent=2) }}</pre>
+</section>
+<section class="result-section"><h2>JWS · 3 partes</h2>
+  <pre id="jws-header">{{ evidence.jws_header | tojson(indent=2) }}</pre>
+  <pre id="jws-token">{{ evidence.jws }}</pre>
+</section>
+<section class="result-section"><h2>JWE · 5 partes</h2>
+  <pre id="jwe-header">{{ evidence.jwe_header | tojson(indent=2) }}</pre>
+  <pre id="jwe-token">{{ evidence.jwe }}</pre>
+</section>
+{% endblock %}
