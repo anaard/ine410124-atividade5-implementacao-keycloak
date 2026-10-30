@@ -18,3 +18,11 @@ RUN mkdir -p runtime infra && chown -R 1000:1000 runtime infra
 USER 1000:1000
 
 CMD ["python", "-m", "telemedicina.portal"]
+
+FROM runtime AS test
+USER root
+COPY requirements-test.txt ./
+RUN pip install --no-cache-dir --no-compile --only-binary=:all: -r requirements-test.txt
+COPY tests ./tests
+USER 1000:1000
+CMD ["python", "-m", "pytest", "-q", "-o", "cache_dir=/tmp/pytest-cache"]

@@ -1,5 +1,8 @@
 **
 !requirements.txt
+!requirements-test.txt
+!tests/
+!tests/*.py
 !telemedicina/
 !telemedicina/*.py
 !telemedicina/*.json
