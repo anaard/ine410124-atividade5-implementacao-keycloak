@@ -13,6 +13,7 @@ from jwcrypto import jwk
 
 from .config import ROOT, RUNTIME, settings
 from .crypto import FIELDS, encrypt_report, header, load_public, sign_report
+from .inspection import describe_tokens
 from .oidc import Identity
 
 CLIENT_ID = "portal-medico-app"
@@ -180,6 +181,7 @@ def create_app():
             "resultado.html",
             evidence=evidence,
             user=user,
+            inspection=describe_tokens(signed, encrypted),
         )
 
     # logout: Encerra a sessão local do portal (a sessão SSO do Keycloak não é encerrada).

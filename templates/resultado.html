@@ -1,19 +1,100 @@
 {% extends "base.html" %}
 {% block title %}Prontuário confirmado{% endblock %}
+{% macro parts_table(parts, prefix) %}
+<table class="parts-table">
+  <caption>Segmentos na ordem em que aparecem no token. Os pontos separam as partes; os tamanhos em bytes são medidos após decodificar base64url.</caption>
+  <thead><tr><th scope="col">Parte</th><th scope="col">Função e conteúdo</th><th scope="col">Tamanho</th></tr></thead>
+  <tbody>{% for part in parts %}
+    <tr data-part="{{ prefix }}-{{ part.number }}">
+      <th scope="row"><span class="part-number">{{ part.number }}.</span> <code>{{ part.name }}</code></th>
+      <td><strong>{{ part.label }}</strong><p>{{ part.explanation }}</p>
+        {% if part.encoded %}
+        <details><summary>Ver esta parte</summary>
+          {% if part.decoded is not none %}<p class="code-label">JSON decodificado</p><pre>{{ part.decoded | tojson(indent=2) }}</pre>{% endif %}
+          <p class="code-label">Valor no token (base64url)</p><pre>{{ part.encoded }}</pre>
+        </details>
+        {% else %}<p class="empty-part">Segmento vazio, conforme ECDH-ES direto.</p>{% endif %}
+      </td>
+      <td class="part-size">{{ part.bytes }} bytes<br><span>{{ part.characters }} caracteres</span></td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+{% endmacro %}
 {% block content %}
 <div class="page-heading"><p class="eyebrow">Resultado do envio</p><h1>Prontuário confirmado</h1>
-  <p class="intro">A API decifrou o envelope e validou a assinatura do médico.</p>
+  <p class="intro">A API recebeu o envelope, decifrou o conteúdo e validou a assinatura do médico antes de confirmar o laudo.</p>
   <a href="/">Preencher outro laudo</a>
 </div>
-<section class="receipt" aria-labelledby="confirmacao"><h2 id="confirmacao">Resposta da API · HTTP {{ evidence.http_status }}</h2>
-  <pre id="api-response">{{ evidence.confirmacao | tojson(indent=2) }}</pre>
+<section class="receipt" aria-labelledby="confirmacao"><h2 id="confirmacao">Confirmação do servidor</h2>
+  <dl class="receipt-data">
+    <div><dt>Requisição</dt><dd><code>POST /api/prontuarios</code></dd></div>
+    <div><dt>Resposta HTTP</dt><dd>{{ evidence.http_status }} · recebimento confirmado</dd></div>
+    <div class="full-row"><dt>Identificador do prontuário</dt><dd><code>{{ evidence.confirmacao.prontuario_id }}</code><small>Identificador único deste laudo (claim <code>jti</code> do JWS).</small></dd></div>
+    <div><dt>Verificação da assinatura</dt><dd>{{ evidence.confirmacao.assinatura }}</dd></div>
+    <div><dt>Proteção do envelope</dt><dd>{{ evidence.confirmacao.cifragem }}</dd></div>
+  </dl>
+  <details><summary>Ver resposta original da API</summary><pre id="api-response">{{ evidence.confirmacao | tojson(indent=2) }}</pre></details>
 </section>
-<section class="result-section"><h2>JWS · 3 partes</h2>
-  <pre id="jws-header">{{ evidence.jws_header | tojson(indent=2) }}</pre>
-  <pre id="jws-token">{{ evidence.jws }}</pre>
+<p class="reading-note">Esta é uma inspeção local do envio. O JWS e os dados médicos são mostrados abaixo para análise; no corpo do POST para a API foi transmitido o JWE cifrado.</p>
+<nav class="result-nav" aria-label="Seções do resultado"><a href="#laudo-assinado">1. Laudo assinado</a><a href="#envelope-cifrado">2. Envelope cifrado</a></nav>
+
+<section class="result-section" id="laudo-assinado" aria-labelledby="titulo-jws">
+  <p class="eyebrow">Primeiro passo · assinatura</p><h2 id="titulo-jws">1. Laudo assinado - JWS</h2>
+  <p>O JWS reúne o conteúdo do laudo e a assinatura digital do médico. A assinatura permite verificar a integridade e a autoria sob a confiança do cadastro da chave. O conteúdo do JWS pode ser lido sem decifrá-lo.</p>
+  <h3>Dados incluídos na assinatura</h3>
+  <dl class="medical-data">
+    <div><dt>Paciente <code>paciente_id</code></dt><dd>{{ inspection.payload.paciente_id }}</dd></div>
+    <div><dt>Diagnóstico <code>diagnostico</code></dt><dd>{{ inspection.payload.diagnostico }}</dd></div>
+    <div><dt>Prescrição <code>prescricao</code></dt><dd>{{ inspection.payload.prescricao }}</dd></div>
+  </dl>
+  <h3>Cabeçalho da assinatura</h3>
+  <dl class="field-definitions">
+    <div><dt><code>alg</code> · {{ evidence.jws_header.alg }}</dt><dd>Algoritmo da assinatura: ECDSA com curva P-256 e SHA-256.</dd></div>
+    <div><dt><code>typ</code> · {{ evidence.jws_header.typ }}</dt><dd>Tipo do token: JSON Web Token.</dd></div>
+    <div><dt><code>kid</code></dt><dd>Identificador da chave de assinatura do médico, calculado a partir da chave pública.<code class="key-value">{{ evidence.jws_header.kid }}</code></dd></div>
+  </dl>
+  <details class="document-details"><summary>Identidade, validade e identificação do laudo</summary>
+    <dl class="field-definitions">
+      <div><dt><code>iss</code> · emissor</dt><dd>Identidade que emitiu o laudo: o subject do médico no Keycloak.<code class="key-value">{{ inspection.payload.iss }}</code></dd></div>
+      <div><dt><code>sub</code> · sujeito</dt><dd>Identidade vinculada ao laudo. A API exige correspondência com o médico autenticado.<code class="key-value">{{ inspection.payload.sub }}</code></dd></div>
+      <div><dt><code>aud</code> · audiência</dt><dd>Serviço ao qual o laudo se destina: <code>{{ inspection.payload.aud }}</code>.</dd></div>
+      <div><dt><code>iat</code> · emissão</dt><dd>{{ inspection.times.iat }}<small>Timestamp Unix: {{ inspection.payload.iat }} segundos.</small></dd></div>
+      <div><dt><code>exp</code> · expiração</dt><dd>{{ inspection.times.exp }}<small>Timestamp Unix: {{ inspection.payload.exp }} segundos. O laudo foi emitido com validade de cinco minutos.</small></dd></div>
+      <div><dt><code>jti</code> · identificador</dt><dd>Identificador único deste laudo; a API o devolve como identificador do prontuário.<code class="key-value">{{ inspection.payload.jti }}</code></dd></div>
+    </dl>
+  </details>
+  <h3>As três partes do JWS</h3>
+  <p class="token-shape"><code>Header.Payload.Signature</code></p>
+  {{ parts_table(inspection.jws_parts, 'jws') }}
+  <details class="document-details"><summary>Ver JWS completo · três segmentos</summary><pre id="jws-token">{{ evidence.jws }}</pre></details>
+  <details class="document-details"><summary>Ver cabeçalho e payload em JSON</summary><h4>Cabeçalho</h4><pre id="jws-header">{{ evidence.jws_header | tojson(indent=2) }}</pre><h4>Payload</h4><pre id="jws-payload">{{ inspection.payload | tojson(indent=2) }}</pre></details>
 </section>
-<section class="result-section"><h2>JWE · 5 partes</h2>
-  <pre id="jwe-header">{{ evidence.jwe_header | tojson(indent=2) }}</pre>
-  <pre id="jwe-token">{{ evidence.jwe }}</pre>
+
+<section class="result-section" id="envelope-cifrado" aria-labelledby="titulo-jwe">
+  <p class="eyebrow">Segundo passo · cifragem</p><h2 id="titulo-jwe">2. Envelope cifrado - JWE</h2>
+  <p>A string JWS inteira foi usada como entrada da cifragem. Esse envelope é o corpo enviado à API. O servidor o decifra primeiro e, então, verifica a assinatura do JWS recuperado.</p>
+  <h3>Cabeçalho do envelope</h3>
+  <dl class="field-definitions">
+    <div><dt><code>alg</code> · {{ evidence.jwe_header.alg }}</dt><dd>Acordo de chaves Diffie-Hellman efêmero-estático. Usa a chave pública do servidor e um novo par efêmero do portal para derivar a CEK, a chave simétrica de conteúdo.</dd></div>
+    <div><dt><code>enc</code> · {{ evidence.jwe_header.enc }}</dt><dd>Cifragem do conteúdo com AES-GCM e CEK de 128 bits (16 bytes). A CEK é obtida pela Concat KDF com SHA-256 a partir do segredo ECDH.</dd></div>
+    <div><dt><code>cty</code> · {{ evidence.jwe_header.cty }}</dt><dd>Tipo do conteúdo interno. Indica que, após decifrar, o servidor deve encontrar outro JWT: o laudo assinado em JWS.</dd></div>
+    <div><dt><code>kid</code></dt><dd>Identificador da chave pública de cifragem do servidor destinatário. É diferente da chave de assinatura do médico.<code class="key-value">{{ evidence.jwe_header.kid }}</code></dd></div>
+    <div><dt><code>epk</code> · chave efêmera</dt><dd>Chave pública do par gerado para esta cifragem. A API combina essa chave com sua chave privada estática para derivar a mesma CEK.
+      <dl class="epk-fields">
+        <div><dt><code>kty</code></dt><dd><code>{{ evidence.jwe_header.epk.kty }}</code> · chave de curva elíptica.</dd></div>
+        <div><dt><code>crv</code></dt><dd><code>{{ evidence.jwe_header.epk.crv }}</code> · curva secp256r1.</dd></div>
+        <div><dt><code>x</code></dt><dd>Coordenada pública X, em base64url.<code class="key-value">{{ evidence.jwe_header.epk.x }}</code></dd></div>
+        <div><dt><code>y</code></dt><dd>Coordenada pública Y, em base64url.<code class="key-value">{{ evidence.jwe_header.epk.y }}</code></dd></div>
+      </dl>
+      <p>A chave privada efêmera não é incluída no cabeçalho. Em outro envio, as coordenadas de <code>epk</code> devem mudar.</p>
+    </dd></div>
+  </dl>
+  <h3>As cinco partes do JWE</h3>
+  <p class="token-shape"><code>ProtectedHeader.EncryptedKey.IV.Ciphertext.AuthTag</code></p>
+  {{ parts_table(inspection.jwe_parts, 'jwe') }}
+  <p class="muted">Na serialização deste envio, os dois pontos consecutivos após o cabeçalho representam a parte <code>EncryptedKey</code> vazia. O token continua tendo cinco segmentos.</p>
+  <details class="document-details"><summary>Ver JWE completo · corpo enviado à API</summary><pre id="jwe-token">{{ evidence.jwe }}</pre></details>
+  <details class="document-details"><summary>Ver cabeçalho JWE em JSON</summary><pre id="jwe-header">{{ evidence.jwe_header | tojson(indent=2) }}</pre></details>
 </section>
+<div class="page-actions"><a class="button" href="/">Preencher outro laudo</a><a href="#conteudo">Voltar ao início do resultado</a></div>
 {% endblock %}
