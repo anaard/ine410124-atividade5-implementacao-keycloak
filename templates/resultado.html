@@ -55,8 +55,7 @@
   </dl>
   <details class="document-details"><summary>Identidade, validade e identificação do laudo</summary>
     <dl class="field-definitions">
-      <div><dt><code>iss</code> · emissor</dt><dd>Identidade que emitiu o laudo: o subject do médico no Keycloak.<code class="key-value">{{ inspection.payload.iss }}</code></dd></div>
-      <div><dt><code>sub</code> · sujeito</dt><dd>Identidade vinculada ao laudo. A API exige correspondência com o médico autenticado.<code class="key-value">{{ inspection.payload.sub }}</code></dd></div>
+      <div><dt><code>iss</code> · emissor</dt><dd>Identidade que emitiu e assinou o laudo: o subject do médico no Keycloak. A API exige correspondência com o médico autenticado.<code class="key-value">{{ inspection.payload.iss }}</code></dd></div>
       <div><dt><code>aud</code> · audiência</dt><dd>Serviço ao qual o laudo se destina: <code>{{ inspection.payload.aud }}</code>.</dd></div>
       <div><dt><code>iat</code> · emissão</dt><dd>{{ inspection.times.iat }}<small>Timestamp Unix: {{ inspection.payload.iat }} segundos.</small></dd></div>
       <div><dt><code>exp</code> · expiração</dt><dd>{{ inspection.times.exp }}<small>Timestamp Unix: {{ inspection.payload.exp }} segundos. O laudo foi emitido com validade de cinco minutos.</small></dd></div>

@@ -47,19 +47,18 @@ def header(token, count):
 
 
 # sign_report: Etapa 3, passo 1. Assina os três campos médicos com ES256 (válido por 5 minutos).
-def sign_report(data, key, subject):
+def sign_report(data, key, issuer):
     if set(data) != set(FIELDS) or not all(v.strip() for v in data.values()):
         raise ValueError("Preencha os três campos do laudo")
 
     now = int(time.time())
     payload = {
-        **data,
-        "iss": subject,
-        "sub": subject,
-        "aud": AUDIENCE,
-        "iat": now,
-        "exp": now + 300,
-        "jti": str(uuid.uuid4()),
+        **data,  # paciente_id, diagnostico e prescricao: o conteúdo do laudo
+        "iss": issuer,  # quem emitiu e assinou o laudo: o "sub" do médico no Keycloak
+        "aud": AUDIENCE,  # para quem o laudo se destina: só a API de prontuários o aceita
+        "iat": now,  # momento da emissão (timestamp Unix)
+        "exp": now + 300,  # fim da validade, 5 minutos depois (limita reenvio de laudo antigo)
+        "jti": str(uuid.uuid4()),  # identificador único do laudo; a API o usa como id do prontuário
     }
     return jwt.encode(
         payload,
@@ -103,15 +102,14 @@ def decrypt_report(token, private_key):
 
 
 # verify_report: Etapa 4. Valida a assinatura ES256 com a chave pública do médico e as claims do laudo.
-def verify_report(signed, doctor_public, subject):
-    # O PyJWT confere assinatura, expiração, emissor, destinatário e sujeito de uma só vez.
+def verify_report(signed, doctor_public, issuer):
+    # O PyJWT confere assinatura, expiração, emissor e destinatário de uma só vez.
     claims = jwt.decode(
         signed,
         load_public(doctor_public).export_to_pem(),
         algorithms=["ES256"],
-        issuer=subject,
+        issuer=issuer,
         audience=AUDIENCE,
-        subject=subject,
-        options={"require": ["iss", "sub", "aud", "exp", "iat", "jti", *FIELDS]},
+        options={"require": ["iss", "aud", "exp", "iat", "jti", *FIELDS]},
     )
     return claims

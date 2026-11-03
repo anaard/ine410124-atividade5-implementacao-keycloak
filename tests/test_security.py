@@ -127,7 +127,7 @@ def test_header_policy(keys, change):
 # Confirma que um laudo com assinatura válida é rejeitado após a expiração.
 def test_expired_report(keys):
     doctor, _, _ = keys
-    claims = {**report(), "iss": "d", "sub": "d", "aud": "prontuarios-api", "iat": 1, "exp": 2, "jti": "old"}
+    claims = {**report(), "iss": "d", "aud": "prontuarios-api", "iat": 1, "exp": 2, "jti": "old"}
     signed = jwt.encode(claims, doctor.export_to_pem(private_key=True, password=None), algorithm="ES256", headers={"kid": doctor.thumbprint()})
     with pytest.raises(jwt.ExpiredSignatureError):
         verify_report(signed, public_key(doctor), "d")
