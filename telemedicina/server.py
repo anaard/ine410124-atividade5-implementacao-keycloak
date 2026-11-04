@@ -39,7 +39,7 @@ def create_app(config=None, identity=None):
             return jsonify(erro="Access token necessário"), 401
 
         try:
-            claims = identity.access(authorization[7:])
+            claims = identity.access(authorization[7:]) # Remove o "Bearer ".
         except PermissionError:
             return jsonify(erro="Perfil de médico necessário"), 403
         except Exception:

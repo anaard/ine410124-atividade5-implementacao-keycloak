@@ -1,5 +1,8 @@
 # INE410124 - Atividade 5: Implementação + Keycloak 
 
+**Aluna:** Ana Regina Delazzari
+**Matrícula:** 202604842
+
 Atividade prática 5 da disciplina INE410124 (Tópicos Especiais em Computação: Segurança - Web, Identidades e Nuvem): login OIDC no Keycloak, laudo médico assinado (JWS) e cifrado com Diffie-Hellman ECDH-ES (JWE).
 
 ## Executar
@@ -39,16 +42,12 @@ O realm é importado só na primeira subida do volume. Se alterar `telemedicina/
 
 ## Como funciona (resumo)
 
-1. O portal leva o médico ao Keycloak (Authorization Code + PKCE) e recebe o access token (RS256), que traz o papel
-   `medico`, `aud=prontuarios-api` e a claim `doctor_jwk` (chave pública do médico).
-2. O portal baixa a chave pública estática do servidor em `/.well-known/jwks.json` e só a usa se a fingerprint
-   for a provisionada em `config.json`.
+1. O portal leva o médico ao Keycloak (Authorization Code + PKCE) e recebe o access token (RS256), que traz o papel `medico`, `aud=prontuarios-api` e a claim `doctor_jwk` (chave pública do médico).
+2. O portal baixa a chave pública estática do servidor em `/.well-known/jwks.json` e só a usa se a fingerprint for a provisionada em `config.json`.
 3. O portal assina `paciente_id`, `diagnostico` e `prescricao` com a chave privada do médico (JWS ES256).
-4. O portal gera um par efêmero, calcula o segredo ECDH com a chave do servidor, deriva a CEK (Concat KDF) e cifra
-   o JWS em um JWE de 5 partes, com a chave pública efêmera em `epk`.
+4. O portal gera um par efêmero, calcula o segredo ECDH com a chave do servidor, deriva a CEK (Concat KDF) e cifra o JWS em um JWE de 5 partes, com a chave pública efêmera em `epk`.
 5. `POST /api/prontuarios` (`Content-Type: application/jose`, `Authorization: Bearer`).
-6. A API valida o access token, calcula o mesmo segredo com sua chave privada e o `epk`, decifra o JWE, verifica o JWS
-   com a `doctor_jwk` do access token (assinado pelo Keycloak) e responde `201`.
+6. A API valida o access token, calcula o mesmo segredo com sua chave privada e o `epk`, decifra o JWE, verifica o JWS com a `doctor_jwk` do access token (assinado pelo Keycloak) e responde `201`.
 
 ECDH-ES, Concat KDF e AES-GCM são executados pelo JWCrypto; a assinatura e a validação de claims, pelo PyJWT.
 O teste `test_nested_round_trip_and_ephemeral_keys` refaz o ECDH e a KDF com a biblioteca `cryptography` para provar a derivação.
